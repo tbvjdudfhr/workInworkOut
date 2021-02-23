@@ -1,0 +1,8 @@
+altgraph==0.17
+chromedriver-autoinstaller==0.2.2
+macholib==1.14
+pyinstaller==4.2
+pyinstaller-hooks-contrib==2020.11
+PyYAML==5.4.1
+selenium==3.141.0
+urllib3==1.26.3
