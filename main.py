@@ -9,7 +9,10 @@ import os
 
 # chromedriver 자동 설치
 chrome_path = chromedriver_autoinstaller.install(cwd=True)
-browser = webdriver.Chrome(chrome_path)
+options = webdriver.ChromeOptions()
+options.add_argument("headless")
+
+browser = webdriver.Chrome(chrome_path, options=options)
 
 browser.get('http://smart.kstec.co.kr')
 time.sleep(2)
