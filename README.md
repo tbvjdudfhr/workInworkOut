@@ -12,6 +12,13 @@
 
 ## 실행 파일 생성
 * dist 폴더에 실행파일 생성
+
+맥OS
 ```bash
 $ pyinstaller -F --add-data "config/info.yml:config" main.py  
+```
+
+윈도우
+```bash
+$ pyinstaller -F --add-data "config/info.yml;config" main.py
 ```
