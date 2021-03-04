@@ -1,6 +1,8 @@
 import datetime
 import os
 import platform
+import subprocess
+import time
 from tkinter import *
 
 import chromedriver_autoinstaller
@@ -10,8 +12,6 @@ from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as ec
 from selenium.webdriver.support.wait import WebDriverWait
-import subprocess
-import time
 
 _CONFIG_PATH = './config/info.yml'
 _PLATFORM = platform.system()
@@ -158,9 +158,14 @@ def main():
     log_img_path = resource_path(
         'logs/' + time_division + '_' + now_date_time.strftime(
             '%Y%m%d_%H_%M_%S') + ('_success' if is_success else '_failed') + '.png')
+    print("log_img_path : " + log_img_path)
 
     driver.get_screenshot_as_file(log_img_path)
-    subprocess.call(['open', log_img_path])
+
+    if _PLATFORM == "Windows":
+        os.startfile(log_img_path)
+    else:
+        subprocess.call(['open', log_img_path])
 
     # 드라이버 종료
     driver.quit()
