@@ -1,2 +1,4 @@
-id: userId
-pwd: userPwd
+url: http://smart.kstec.co.kr/app/ehr
+id: loginId
+pwd: loginPassword
+isDebug: False

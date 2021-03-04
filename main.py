@@ -1,26 +1,28 @@
+import datetime
 import os
-import time
-from datetime import datetime
+import platform
 from tkinter import *
 
 import chromedriver_autoinstaller
-import wx
 import yaml
 from selenium import webdriver
-from selenium.webdriver.common.keys import Keys
+from selenium.common.exceptions import TimeoutException
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support import expected_conditions as ec
+from selenium.webdriver.support.wait import WebDriverWait
+from win10toast import ToastNotifier
 
-# chromedriver 자동 설치
-chrome_path = chromedriver_autoinstaller.install(cwd=True)
-options = webdriver.ChromeOptions()
-options.add_argument("headless")
-
-browser = webdriver.Chrome(chrome_path, options=options)
-
-browser.get('http://smart.kstec.co.kr')
-time.sleep(2)
+_CONFIG_PATH = './config/info.yml'
+_PLATFORM = platform.system()
 
 
-def createFolder(directory):
+class WorkTime:
+    start_work_time_str = None
+    end_work_time_str = None
+
+
+# directory 경로에 폴더 생성
+def create_folder(directory):
     try:
         if not os.path.exists(directory):
             os.makedirs(directory)
@@ -28,57 +30,152 @@ def createFolder(directory):
         print('Error: Creating directory. ' + directory)
 
 
+# 경로 반환
 def resource_path(relative_path):
     """ Get absolute path to resource, works for dev and for PyInstaller """
     try:
         # PyInstaller creates a temp folder and stores path in _MEIPASS
         base_path = sys._MEIPASS
+
     except Exception:
         base_path = os.path.abspath(".")
 
     return os.path.join(base_path, relative_path)
 
 
-file_path = resource_path('./config/info.yml')
-
-createFolder(resource_path('logs'))
-
-# yml 정보 가져오기
-with open(file_path) as f:
+# conf 파일 로드
+with open(resource_path(_CONFIG_PATH)) as f:
     conf = yaml.load(f, Loader=yaml.FullLoader)
 
-loginId = browser.find_element_by_id('username')
-loginId.send_keys(conf['id'])
 
-loginPwd = browser.find_element_by_id('password')
-loginPwd.send_keys(conf['pwd'])
-loginPwd.send_keys(Keys.RETURN)
-time.sleep(2)
+# 드라이버 반환
+def init_driver():
+    # 크롬드라이버 설치
+    chrome_path = chromedriver_autoinstaller.install(cwd=True)
 
-now = datetime.now()
-ampm = now.strftime('%p')
+    # 백그라운드 실행 옵션 추가
+    options = webdriver.ChromeOptions()
 
-# 현재시간이 오전이면 출근 오후면 퇴근 클릭
+    if not (conf['isDebug']):
+        options.add_argument("headless")
 
-workBtn = browser.find_element_by_id('workIn') if ampm == 'AM' else browser.find_element_by_id('workOut')
-# workBtn.click()
+    driver = webdriver.Chrome(chrome_path, options=options)
+    driver.implicitly_wait(30)
+    driver.get(conf['url'])
 
-# 결과 메시지 박스 출력
-imgPath = resource_path('logs\\' + ampm + now.strftime('%Y%m%d_%H_%M_%S') + '.png')
-print(imgPath)
-browser.get_screenshot_as_file(imgPath)
-time.sleep(2)
+    return driver
 
-title = '출근처리 결과' if ampm == 'AM' else '퇴근처리 결과'
 
-app = wx.App(False)
-frame = wx.Frame(None, wx.ID_ANY, title, size=(700, 500))
+# 페이지 로드 대기
+def wait_load(elm_id, driver):
+    try:
+        element = WebDriverWait(driver, 30).until(
+            ec.presence_of_element_located((By.ID, elm_id))
+        )
+    except TimeoutException:
+        print("Failed to find element " + elm_id)
+        driver.quit()
 
-resultImg = wx.Image(imgPath, wx.BITMAP_TYPE_ANY).ConvertToBitmap()
-wx.StaticBitmap(frame, -1, bitmap=resultImg, pos=(10, 5), size=(700, 500))
 
-frame.Show(True)
-app.MainLoop()
+def find_time_group(driver):
+    elm_time_group = driver.find_element_by_xpath(
+        "//*[@id='summary']/div/div[1]/div[1]/span[1]/span[2]")
 
-time.sleep(2)
-browser.quit()
+    work_time = WorkTime()
+    work_time.start_work_time_str = elm_time_group.text.split('~')[0].strip()
+    work_time.end_work_time_str = elm_time_group.text.split('~')[1].strip()
+
+    return work_time
+
+
+def notify_windows(title, text):
+    toaster = ToastNotifier()
+    toaster.show_toast(title, text, duration=60)
+
+
+def notify_macos(title, text):
+    command = 'display notification \"{}\" with title \"{}\"'.format(text, title)
+    os.system("osascript -e {}".format(command))
+
+
+def main():
+    # 로그 폴더 생성
+    create_folder(resource_path('logs'))
+
+    # 브라우저 실행
+    driver = init_driver()
+
+    # 로그인 진행
+    elm_username = driver.find_element_by_id('username')
+    elm_password = driver.find_element_by_id('password')
+    elm_login_submit = driver.find_element_by_id('login_submit')
+
+    elm_username.send_keys(conf['id'])
+    elm_password.send_keys(conf['pwd'])
+
+    elm_login_submit.click()
+
+    # 페이지 로드 대기
+    wait_load('overtime', driver)
+
+    # 설정된 출근 시간 확인
+    work_time = find_time_group(driver)
+
+    # 현재 날짜, 구분(오전/오후)설정
+    now_date_time = datetime.datetime.today()
+    now_date_time_str = now_date_time.strftime('%Y-%m-%d')
+    time_division = datetime.datetime.now().strftime('%p')
+
+    # 출, 퇴근 시간 설정
+    start_work_time_str = now_date_time_str + ' ' + work_time.start_work_time_str
+    end_work_time_str = now_date_time_str + ' ' + work_time.end_work_time_str
+
+    start_work_time = datetime.datetime.strptime(start_work_time_str, '%Y-%m-%d %H:%M:%S')
+    end_work_time = datetime.datetime.strptime(end_work_time_str, '%Y-%m-%d %H:%M:%S')
+
+    is_success = False
+    result_msg = 'No message'
+
+    if time_division == 'AM':
+        # 오전인 경우 출근 처리
+        elm_work_in = driver.find_element_by_id('workIn')
+
+        if not (conf['isDebug']):
+            elm_work_in.click()
+
+        is_success = True
+        result_msg = "출근 처리 시간 : {}".format(now_date_time.strftime('%Y-%m-%d %H:%M:%S'))
+
+    else:
+        # 오후인 경우 퇴근 처리(오동작방지를 위해 퇴근시간 이후부터 작동)
+        if now_date_time > end_work_time:
+            elm_work_out = driver.find_element_by_id('workOut')
+
+            if not (conf['isDebug']):
+                elm_work_out.click()
+
+            is_success = True
+            result_msg = "퇴근 처리 시간 : {}".format(now_date_time.strftime('%Y-%m-%d %H:%M:%S'))
+
+        else:
+            result_msg = "퇴근시간 이후({}) 처리 가능 \n현재 시간 : {}".format(end_work_time_str,
+                                                                 now_date_time.strftime('%Y-%m-%d %H:%M:%S'))
+            is_success = False
+
+    # 스크린샷 생성
+    log_img_path = resource_path(
+        'logs\\' + time_division + now_date_time.strftime('%Y%m%d_%H_%M_%S') + is_success.__str__() + '.png')
+
+    driver.get_screenshot_as_file(log_img_path)
+
+    # 작업결과 알림창 생성
+    notify_title = "출퇴근 처리 {}".format("성공" if is_success else "실패")
+
+    if _PLATFORM == 'Windows':
+        notify_windows(notify_title, result_msg)
+    else:
+        notify_macos(notify_title, result_msg)
+
+
+if __name__ == "__main__":
+    main()
