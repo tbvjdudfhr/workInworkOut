@@ -10,7 +10,8 @@ from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as ec
 from selenium.webdriver.support.wait import WebDriverWait
-from win10toast import ToastNotifier
+import subprocess
+import time
 
 _CONFIG_PATH = './config/info.yml'
 _PLATFORM = platform.system()
@@ -88,16 +89,6 @@ def find_time_group(driver):
     return work_time
 
 
-def notify_windows(title, text):
-    toaster = ToastNotifier()
-    toaster.show_toast(title, text, duration=60)
-
-
-def notify_macos(title, text):
-    command = 'display notification \"{}\" with title \"{}\"'.format(text, title)
-    os.system("osascript -e {}".format(command))
-
-
 def main():
     # 로그 폴더 생성
     create_folder(resource_path('logs'))
@@ -117,6 +108,7 @@ def main():
 
     # 페이지 로드 대기
     wait_load('overtime', driver)
+    time.sleep(5)
 
     # 설정된 출근 시간 확인
     work_time = find_time_group(driver)
@@ -134,7 +126,7 @@ def main():
     end_work_time = datetime.datetime.strptime(end_work_time_str, '%Y-%m-%d %H:%M:%S')
 
     is_success = False
-    result_msg = 'No message'
+    # result_msg = 'No message'
 
     if time_division == 'AM':
         # 오전인 경우 출근 처리
@@ -144,7 +136,7 @@ def main():
             elm_work_in.click()
 
         is_success = True
-        result_msg = "출근 처리 시간 : {}".format(now_date_time.strftime('%Y-%m-%d %H:%M:%S'))
+        # result_msg = "출근 처리 시간 : {}".format(now_date_time.strftime('%Y-%m-%d %H:%M:%S'))
 
     else:
         # 오후인 경우 퇴근 처리(오동작방지를 위해 퇴근시간 이후부터 작동)
@@ -155,26 +147,23 @@ def main():
                 elm_work_out.click()
 
             is_success = True
-            result_msg = "퇴근 처리 시간 : {}".format(now_date_time.strftime('%Y-%m-%d %H:%M:%S'))
+            # result_msg = "퇴근 처리 시간 : {}".format(now_date_time.strftime('%Y-%m-%d %H:%M:%S'))
 
         else:
-            result_msg = "퇴근시간 이후({}) 처리 가능 \n현재 시간 : {}".format(end_work_time_str,
-                                                                 now_date_time.strftime('%Y-%m-%d %H:%M:%S'))
+            # result_msg = "퇴근시간 이후({}) 처리 가능 \n현재 시간 : {}".format(end_work_time_str,
+            #                                                      now_date_time.strftime('%Y-%m-%d %H:%M:%S'))
             is_success = False
 
-    # 스크린샷 생성
+    # 스크린샷 생성 후 실
     log_img_path = resource_path(
-        'logs\\' + time_division + now_date_time.strftime('%Y%m%d_%H_%M_%S') + is_success.__str__() + '.png')
+        'logs/' + time_division + '_' + now_date_time.strftime(
+            '%Y%m%d_%H_%M_%S') + ('_success' if is_success else '_failed') + '.png')
 
     driver.get_screenshot_as_file(log_img_path)
+    subprocess.call(['open', log_img_path])
 
-    # 작업결과 알림창 생성
-    notify_title = "출퇴근 처리 {}".format("성공" if is_success else "실패")
-
-    if _PLATFORM == 'Windows':
-        notify_windows(notify_title, result_msg)
-    else:
-        notify_macos(notify_title, result_msg)
+    # 드라이버 종료
+    driver.quit()
 
 
 if __name__ == "__main__":
