@@ -3,6 +3,7 @@ import os
 import platform
 import subprocess
 import time
+import random
 from tkinter import *
 
 import chromedriver_autoinstaller
@@ -108,7 +109,9 @@ def main():
 
     # 페이지 로드 대기
     wait_load('overtime', driver)
-    time.sleep(5)
+
+    # 출/퇴근 시간이 고정적인걸 방지하기 위해 랜덤 부여
+    time.sleep(random.randrange(1, 120))
 
     # 설정된 출근 시간 확인
     work_time = find_time_group(driver)
@@ -154,7 +157,7 @@ def main():
             #                                                      now_date_time.strftime('%Y-%m-%d %H:%M:%S'))
             is_success = False
 
-    # 스크린샷 생성 후 실
+    # 스크린샷 생성 후 실행
     log_img_path = resource_path(
         'logs/' + time_division + '_' + now_date_time.strftime(
             '%Y%m%d_%H_%M_%S') + ('_success' if is_success else '_failed') + '.png')
